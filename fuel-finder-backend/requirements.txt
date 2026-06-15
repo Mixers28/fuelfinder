@@ -1,0 +1,12 @@
+# UK Fuel Finder MVP Backend
+# Python 3.11+
+
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+httpx==0.27.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+python-dotenv==1.0.1
+aiosqlite==0.20.0
+apscheduler==3.10.4
+eval_type_backport
