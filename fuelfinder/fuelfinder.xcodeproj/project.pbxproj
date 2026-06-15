@@ -12,6 +12,7 @@
 		4C394C082FE0BA200070000E /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C394C012FE0BA0E0070000E /* LocationManager.swift */; };
 		4C394C092FE0BA200070000E /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C394C032FE0BA160070000E /* ContentView.swift */; };
 		4C394C0A2FE0BA200070000E /* StationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C394C042FE0BA160070000E /* StationDetailView.swift */; };
+		4C394C0B2FE0BA200070000E /* StationMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C394C0C2FE0BA200070000E /* StationMapView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +41,7 @@
 		4C394C012FE0BA0E0070000E /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		4C394C032FE0BA160070000E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4C394C042FE0BA160070000E /* StationDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationDetailView.swift; sourceTree = "<group>"; };
+		4C394C0C2FE0BA200070000E /* StationMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationMapView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +111,7 @@
 			children = (
 				4C394C032FE0BA160070000E /* ContentView.swift */,
 				4C394C042FE0BA160070000E /* StationDetailView.swift */,
+				4C394C0C2FE0BA200070000E /* StationMapView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -253,6 +256,7 @@
 				4C394C082FE0BA200070000E /* LocationManager.swift in Sources */,
 				4C394C092FE0BA200070000E /* ContentView.swift in Sources */,
 				4C394C0A2FE0BA200070000E /* StationDetailView.swift in Sources */,
+				4C394C0B2FE0BA200070000E /* StationMapView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

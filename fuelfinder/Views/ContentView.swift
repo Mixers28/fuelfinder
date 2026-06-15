@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedStation: StationSummary?
+    @State private var showMap = false
     
     var body: some View {
         NavigationStack {
@@ -86,11 +87,10 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Station List
-    
+    // MARK: - Station List / Map
+
     private var stationListView: some View {
         VStack(spacing: 0) {
-            // Fuel type picker
             Picker("Fuel Type", selection: $selectedFuelType) {
                 ForEach([FuelType.E10, .E5, .B7], id: \.self) { type in
                     Text(type.shortName).tag(type)
@@ -100,62 +100,91 @@ struct ContentView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
             .onChange(of: selectedFuelType) { fetchStations() }
-            
-            // Sort toggle
-            HStack {
-                if let response = nearbyResponse {
-                    Text("\(response.total) stations")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Picker("Sort", selection: $sortOrder) {
-                    Text("Cheapest").tag(SortOrder.price)
-                    Text("Nearest").tag(SortOrder.distance)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 200)
-                .onChange(of: sortOrder) { fetchStations() }
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            
-            if isLoading {
-                Spacer()
-                ProgressView()
-                Spacer()
-            } else if let error = errorMessage {
-                Spacer()
-                Text(error)
-                    .foregroundStyle(.secondary)
-                    .padding()
-                Button("Retry") { fetchStations() }
-                Spacer()
+
+            if showMap {
+                mapContent
             } else {
-                stationsList
+                listContent
+            }
+        }
+        .navigationDestination(for: StationSummary.self) { station in
+            StationDetailView(stationId: station.stationId, fuelType: selectedFuelType)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    withAnimation { showMap.toggle() }
+                } label: {
+                    Image(systemName: showMap ? "list.bullet" : "map")
+                }
             }
         }
         .task { fetchStations() }
     }
-    
-    private var stationsList: some View {
-        List {
-            if let stations = nearbyResponse?.stations {
-                ForEach(stations) { station in
-                    NavigationLink(value: station) {
-                        StationRow(
-                            station: station,
-                            isCheapest: station.stationId == nearbyResponse?.cheapest?.stationId,
-                            isNearest: station.stationId == nearbyResponse?.nearest?.stationId,
-                            cheapestPrice: nearbyResponse?.cheapest?.price?.pencePerLitre
-                        )
+
+    @ViewBuilder
+    private var mapContent: some View {
+        if let response = nearbyResponse, let coord = locationManager.location {
+            StationMapView(
+                stations: response.stations,
+                userCoordinate: coord,
+                cheapestId: response.cheapest?.stationId,
+                nearestId: response.nearest?.stationId,
+                selectedFuelType: selectedFuelType
+            )
+            .ignoresSafeArea(edges: .bottom)
+        } else if isLoading {
+            Spacer()
+            ProgressView()
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
+        HStack {
+            if let response = nearbyResponse {
+                Text("\(response.total) stations")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Picker("Sort", selection: $sortOrder) {
+                Text("Cheapest").tag(SortOrder.price)
+                Text("Nearest").tag(SortOrder.distance)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 200)
+            .onChange(of: sortOrder) { fetchStations() }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+
+        if isLoading {
+            Spacer()
+            ProgressView()
+            Spacer()
+        } else if let error = errorMessage {
+            Spacer()
+            Text(error).foregroundStyle(.secondary).padding()
+            Button("Retry") { fetchStations() }
+            Spacer()
+        } else {
+            List {
+                if let stations = nearbyResponse?.stations {
+                    ForEach(stations) { station in
+                        NavigationLink(value: station) {
+                            StationRow(
+                                station: station,
+                                isCheapest: station.stationId == nearbyResponse?.cheapest?.stationId,
+                                isNearest: station.stationId == nearbyResponse?.nearest?.stationId,
+                                cheapestPrice: nearbyResponse?.cheapest?.price?.pencePerLitre
+                            )
+                        }
                     }
                 }
             }
-        }
-        .listStyle(.plain)
-        .navigationDestination(for: StationSummary.self) { station in
-            StationDetailView(stationId: station.stationId, fuelType: selectedFuelType)
+            .listStyle(.plain)
         }
     }
     
