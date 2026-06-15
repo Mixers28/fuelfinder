@@ -5,8 +5,7 @@ import Foundation
 class FuelFinderAPI {
     static let shared = FuelFinderAPI()
     
-    // Point this at your deployed backend
-    private let baseURL = "https://fuelfinder-production.up.railway.app"
+    private let baseURL = "https://fuelfinder-production.up.railway.app/api"
     
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
