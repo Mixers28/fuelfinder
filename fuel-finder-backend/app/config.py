@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     # Germany — Tankerkönig (creativecommons.tankerkoenig.de)
     tankerkoenig_api_key: str = ""
 
-    # Netherlands — Directprijzen (directprijzen.nl)
-    directprijzen_api_key: str = ""
+    # Netherlands — ANWB (api.anwb.nl, key from app traffic interception)
+    anwb_api_key: str = ""
 
     station_cache_ttl: int = 3600  # 1 hour
     price_cache_ttl: int = 900  # 15 minutes

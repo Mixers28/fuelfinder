@@ -3,7 +3,7 @@
 import logging
 from app.services.fuel_finder_client import fuel_finder_client
 from app.services.tankerkoenig_client import fetch_stations_de
-from app.services.directprijzen_client import fetch_stations_nl
+from app.services.anwb_client import fetch_stations_nl
 from app.database import bulk_upsert_stations, bulk_upsert_prices, get_cache_age_seconds
 from app.config import get_settings
 
