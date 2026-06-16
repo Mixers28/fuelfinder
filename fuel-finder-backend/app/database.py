@@ -9,9 +9,12 @@ or concurrent write throughput from multiple ingestion workers.
 
 import aiosqlite
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(os.environ.get("DATABASE_PATH", "fuel_finder.db"))
 
@@ -26,6 +29,7 @@ CREATE TABLE IF NOT EXISTS stations (
     longitude REAL NOT NULL,
     amenities TEXT DEFAULT '[]',       -- JSON array
     opening_hours TEXT,
+    country TEXT NOT NULL DEFAULT 'uk',
     fetched_at TEXT NOT NULL            -- ISO8601
 );
 
@@ -49,6 +53,13 @@ async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
         await db.commit()
+        # Migration: add country column to existing databases
+        try:
+            await db.execute("ALTER TABLE stations ADD COLUMN country TEXT NOT NULL DEFAULT 'uk'")
+            await db.commit()
+            logger.info("DB migration: added country column to stations")
+        except Exception:
+            pass  # Column already exists
 
 
 async def upsert_station(
@@ -125,8 +136,8 @@ async def bulk_upsert_stations(stations: list[dict]):
         await db.executemany(
             """INSERT INTO stations
                (station_id, trading_name, brand, address, postcode,
-                latitude, longitude, amenities, opening_hours, fetched_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                latitude, longitude, amenities, opening_hours, country, fetched_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(station_id) DO UPDATE SET
                  trading_name=excluded.trading_name,
                  brand=excluded.brand,
@@ -136,6 +147,7 @@ async def bulk_upsert_stations(stations: list[dict]):
                  longitude=excluded.longitude,
                  amenities=excluded.amenities,
                  opening_hours=excluded.opening_hours,
+                 country=excluded.country,
                  fetched_at=excluded.fetched_at
             """,
             [
@@ -149,6 +161,7 @@ async def bulk_upsert_stations(stations: list[dict]):
                     s["longitude"],
                     json.dumps(s.get("amenities", [])),
                     s.get("opening_hours"),
+                    s.get("country", "uk"),
                     now,
                 )
                 for s in stations
@@ -206,17 +219,17 @@ async def get_station_prices(station_id: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-async def get_all_stations_with_fuel(fuel_type: str) -> list[dict]:
-    """Return all stations that have a price for the given fuel type."""
+async def get_all_stations_with_fuel(fuel_type: str, country: str = "uk") -> list[dict]:
+    """Return all stations for a country that have a price for the given fuel type."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """SELECT s.*, fp.pence_per_litre, fp.updated_at as price_updated_at
                FROM stations s
                JOIN fuel_prices fp ON s.station_id = fp.station_id
-               WHERE fp.fuel_type = ?
+               WHERE fp.fuel_type = ? AND s.country = ?
             """,
-            (fuel_type,),
+            (fuel_type, country),
         )
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]

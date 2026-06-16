@@ -13,6 +13,7 @@ from app.services.station_service import (
     station_detail,
     fill_now_recommendation,
 )
+from app.services.country_detector import detect_country
 
 router = APIRouter(prefix="/api", tags=["stations"])
 
@@ -27,7 +28,8 @@ async def get_nearby_stations(
     limit: int = Query(20, ge=1, le=50, description="Max results"),
 ):
     """Find nearby stations with prices for the selected fuel type."""
-    return await nearby_stations(lat, lng, fuel_type, radius, sort, limit)
+    country = detect_country(lat, lng)
+    return await nearby_stations(lat, lng, fuel_type, radius, sort, limit, country)
 
 
 @router.get("/stations/{station_id}", response_model=StationDetail)
@@ -66,7 +68,8 @@ async def get_fill_recommendation(
     tank_litres: float = Query(40.0, ge=10, le=100, description="Tank size in litres"),
 ):
     """Should the user drive further for cheaper fuel?"""
-    result = await fill_now_recommendation(lat, lng, fuel_type, radius, tank_litres)
+    country = detect_country(lat, lng)
+    result = await fill_now_recommendation(lat, lng, fuel_type, radius, tank_litres, country)
     if not result:
         raise HTTPException(status_code=404, detail="No stations found in range")
     return result

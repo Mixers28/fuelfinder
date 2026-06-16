@@ -29,11 +29,14 @@ struct FuelPrice: Codable, Identifiable, Hashable {
     let fuelType: FuelType
     let pencePerLitre: Double
     let updatedAt: Date
-    
+    let currency: String
+
     var id: String { fuelType.rawValue }
-    
+
+    var currencySymbol: String { currency == "EUR" ? "€" : "£" }
+
     var formattedPrice: String {
-        String(format: "£%.3f", pencePerLitre / 100.0)
+        String(format: "\(currencySymbol)%.3f", pencePerLitre / 100.0)
     }
     
     var timeAgo: String {
@@ -50,6 +53,7 @@ struct FuelPrice: Codable, Identifiable, Hashable {
         case fuelType = "fuel_type"
         case pencePerLitre = "pence_per_litre"
         case updatedAt = "updated_at"
+        case currency
     }
 }
 
@@ -63,7 +67,8 @@ struct StationSummary: Codable, Identifiable, Hashable {
     let longitude: Double
     let distanceMiles: Double
     let price: FuelPrice?
-    
+    let country: String
+
     var id: String { stationId }
     
     var formattedDistance: String {
@@ -75,7 +80,7 @@ struct StationSummary: Codable, Identifiable, Hashable {
         case tradingName = "trading_name"
         case brand, address, postcode, latitude, longitude
         case distanceMiles = "distance_miles"
-        case price
+        case price, country
     }
 }
 
@@ -90,15 +95,16 @@ struct StationDetail: Codable, Identifiable {
     let amenities: [String]
     let openingHours: String?
     let prices: [FuelPrice]
-    
+    let country: String
+
     var id: String { stationId }
-    
+
     enum CodingKeys: String, CodingKey {
         case stationId = "station_id"
         case tradingName = "trading_name"
         case brand, address, postcode, latitude, longitude, amenities
         case openingHours = "opening_hours"
-        case prices
+        case prices, country
     }
 }
 

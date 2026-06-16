@@ -24,8 +24,9 @@ class SortBy(str, Enum):
 
 class FuelPrice(BaseModel):
     fuel_type: FuelType
-    pence_per_litre: float
+    pence_per_litre: float   # minor currency units per litre (pence for GBP, cents for EUR)
     updated_at: datetime
+    currency: str = "GBP"   # ISO 4217: GBP, EUR
 
 
 class StationSummary(BaseModel):
@@ -38,6 +39,7 @@ class StationSummary(BaseModel):
     longitude: float
     distance_miles: float
     price: FuelPrice | None = None
+    country: str = "uk"
 
 
 class StationDetail(BaseModel):
@@ -51,6 +53,7 @@ class StationDetail(BaseModel):
     amenities: list[str] = []
     opening_hours: str | None = None
     prices: list[FuelPrice] = []
+    country: str = "uk"
 
 
 class NearbyResponse(BaseModel):

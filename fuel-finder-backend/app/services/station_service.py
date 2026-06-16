@@ -6,6 +6,7 @@ import json
 import math
 from datetime import datetime
 from app.database import get_all_stations_with_fuel, get_station, get_station_prices
+from app.services.country_detector import CURRENCY_FOR_COUNTRY
 from app.models.schemas import (
     StationSummary,
     StationDetail,
@@ -32,22 +33,29 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-_MIN_PRICE_PPL = 80.0   # below this is corrupt data (not real UK pump price)
-_MAX_PRICE_PPL = 300.0  # above this is corrupt data
+# Plausible price bounds per country (minor currency units per litre)
+_PRICE_BOUNDS: dict[str, tuple[float, float]] = {
+    "uk": (80.0, 300.0),   # pence/L
+    "nl": (100.0, 400.0),  # euro cents/L
+    "de": (100.0, 400.0),  # euro cents/L
+}
 
 
 def _row_to_summary(row: dict, user_lat: float, user_lng: float, fuel_type: str) -> StationSummary | None:
-    """Returns None if the price is outside the plausible range for UK fuel."""
+    """Returns None if the price is outside the plausible range for this country."""
+    country = row.get("country", "uk")
     dist = haversine_miles(user_lat, user_lng, row["latitude"], row["longitude"])
     price = None
     if "pence_per_litre" in row:
         ppl = row["pence_per_litre"]
-        if not (_MIN_PRICE_PPL <= ppl <= _MAX_PRICE_PPL):
+        lo, hi = _PRICE_BOUNDS.get(country, (80.0, 400.0))
+        if not (lo <= ppl <= hi):
             return None
         price = FuelPrice(
             fuel_type=FuelType(fuel_type),
             pence_per_litre=ppl,
             updated_at=row.get("price_updated_at", row.get("updated_at", "2026-01-01T00:00:00Z")),
+            currency=CURRENCY_FOR_COUNTRY.get(country, "GBP"),
         )
     return StationSummary(
         station_id=row["station_id"],
@@ -59,6 +67,7 @@ def _row_to_summary(row: dict, user_lat: float, user_lng: float, fuel_type: str)
         longitude=row["longitude"],
         distance_miles=round(dist, 2),
         price=price,
+        country=country,
     )
 
 
@@ -69,9 +78,10 @@ async def nearby_stations(
     radius_miles: float = 15.0,
     sort_by: SortBy = SortBy.price,
     limit: int = 20,
+    country: str = "uk",
 ) -> NearbyResponse:
     """Find stations near (lat, lng) with prices for fuel_type."""
-    rows = await get_all_stations_with_fuel(fuel_type.value)
+    rows = await get_all_stations_with_fuel(fuel_type.value, country)
 
     summaries = []
     for row in rows:
@@ -107,17 +117,20 @@ async def station_detail(station_id: str) -> StationDetail | None:
         return None
 
     price_rows = await get_station_prices(station_id)
-    prices = [
+    amenities = json.loads(row.get("amenities", "[]")) if isinstance(row.get("amenities"), str) else row.get("amenities", [])
+
+    country = row.get("country", "uk")
+    currency = CURRENCY_FOR_COUNTRY.get(country, "GBP")
+    prices_with_currency = [
         FuelPrice(
             fuel_type=FuelType(p["fuel_type"]),
             pence_per_litre=p["pence_per_litre"],
             updated_at=p["updated_at"],
+            currency=currency,
         )
         for p in price_rows
         if p["fuel_type"] in ("E10", "E5", "B7", "SDV")
     ]
-
-    amenities = json.loads(row.get("amenities", "[]")) if isinstance(row.get("amenities"), str) else row.get("amenities", [])
 
     return StationDetail(
         station_id=row["station_id"],
@@ -129,7 +142,8 @@ async def station_detail(station_id: str) -> StationDetail | None:
         longitude=row["longitude"],
         amenities=amenities,
         opening_hours=row.get("opening_hours"),
-        prices=prices,
+        prices=prices_with_currency,
+        country=country,
     )
 
 
@@ -202,9 +216,10 @@ async def fill_now_recommendation(
     fuel_type: FuelType,
     radius_miles: float = 15.0,
     tank_litres: float = 40.0,
+    country: str = "uk",
 ) -> FillNowResponse | None:
     """The main "should I drive further?" recommendation."""
-    result = await nearby_stations(lat, lng, fuel_type, radius_miles, SortBy.price, limit=50)
+    result = await nearby_stations(lat, lng, fuel_type, radius_miles, SortBy.price, limit=50, country=country)
     if not result.cheapest or not result.nearest:
         return None
 
