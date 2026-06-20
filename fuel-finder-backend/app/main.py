@@ -11,10 +11,14 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.routers import stations as station_routes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.database import init_db
+from app.models.schemas import FillNowResponse, NearbyResponse, StationDetail
 from app.routers.stations import router as stations_router
+from app.routers.diagnostics import router as diagnostics_router
+from app.routers.admin_import import router as admin_import_router
 from app.services.ingestion import refresh_stations, refresh_prices, refresh_if_stale
 from app.config import get_settings
 
@@ -78,15 +82,47 @@ app.add_middleware(
 )
 
 app.include_router(stations_router)
+app.include_router(diagnostics_router)
+app.include_router(admin_import_router)
+
+# Backward-compatible routes for early iOS builds that omitted the /api prefix.
+app.add_api_route(
+    "/stations/nearby",
+    station_routes.get_nearby_stations,
+    methods=["GET"],
+    response_model=NearbyResponse,
+    include_in_schema=False,
+)
+app.add_api_route(
+    "/stations/{station_id}",
+    station_routes.get_station,
+    methods=["GET"],
+    response_model=StationDetail,
+    include_in_schema=False,
+)
+app.add_api_route(
+    "/stations/{station_id}/price-history",
+    station_routes.get_price_history,
+    methods=["GET"],
+    include_in_schema=False,
+)
+app.add_api_route(
+    "/recommendation/fill-now",
+    station_routes.get_fill_recommendation,
+    methods=["GET"],
+    response_model=FillNowResponse,
+    include_in_schema=False,
+)
 
 
 @app.get("/health")
 async def health():
-    from app.database import get_cache_age_seconds
+    from app.database import get_cache_age_seconds, get_cache_counts
 
     age = await get_cache_age_seconds()
     return {
         "status": "ok",
         "cache_age_seconds": round(age, 1) if age else None,
         "cache_stale": age is not None and age > get_settings().price_cache_ttl,
+        "cache_counts": await get_cache_counts(),
     }

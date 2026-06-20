@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.fuelfinder.csv-import</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/michael/Documents/fuel app/fuel-finder-backend/automation/local_fuel_csv_import.py</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>FUEL_FINDER_IMPORT_URL</key>
+    <string>https://fuelfinder-production.up.railway.app/admin/import/fuel-finder-csv</string>
+    <key>ADMIN_IMPORT_TOKEN</key>
+    <string>REPLACE_WITH_A_NEW_RANDOM_ADMIN_IMPORT_TOKEN</string>
+  </dict>
+
+  <!-- Run every 6 hours. -->
+  <key>StartInterval</key>
+  <integer>21600</integer>
+
+  <!-- Also run when the Mac starts/logs in. -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/fuelfinder-csv-import.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/fuelfinder-csv-import.err</string>
+</dict>
+</plist>

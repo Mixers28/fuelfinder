@@ -12,16 +12,21 @@ logger = logging.getLogger(__name__)
 
 async def refresh_stations():
     """Fetch station metadata for all active countries and cache locally."""
+    settings = get_settings()
+
     # UK
-    try:
-        stations = await fuel_finder_client.fetch_stations()
-        if stations:
-            await bulk_upsert_stations(stations)
-            logger.info("UK: cached %d stations", len(stations))
-        else:
-            logger.warning("UK: station fetch returned empty — keeping stale cache")
-    except Exception:
-        logger.exception("UK: failed to refresh stations")
+    if settings.uk_data_source == "api":
+        try:
+            stations = await fuel_finder_client.fetch_stations()
+            if stations:
+                await bulk_upsert_stations(stations)
+                logger.info("UK: cached %d stations", len(stations))
+            else:
+                logger.warning("UK: station fetch returned empty — keeping stale cache")
+        except Exception:
+            logger.exception("UK: failed to refresh stations")
+    else:
+        logger.info("UK: skipping API station refresh because UK_DATA_SOURCE=%s", settings.uk_data_source)
 
     # Germany
     try:
@@ -51,6 +56,11 @@ async def refresh_stations():
 
 async def refresh_prices():
     """Fetch UK fuel prices and cache locally. DE/NL prices come with stations."""
+    settings = get_settings()
+    if settings.uk_data_source != "api":
+        logger.info("UK: skipping API price refresh because UK_DATA_SOURCE=%s", settings.uk_data_source)
+        return
+
     try:
         prices = await fuel_finder_client.fetch_prices()
         if prices:
