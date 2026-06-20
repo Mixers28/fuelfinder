@@ -5,7 +5,7 @@ import Foundation
 class FuelFinderAPI {
     static let shared = FuelFinderAPI()
     
-    private let baseURL = "https://fuelfinder-production.up.railway.app/api"
+    private let baseURL = "https://fuel-finder.chaosisaladder.co.uk"
     
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -23,7 +23,7 @@ class FuelFinderAPI {
         radius: Double = 15.0,
         limit: Int = 20
     ) async throws -> NearbyResponse {
-        var components = URLComponents(string: "\(baseURL)/stations/nearby")!
+        var components = URLComponents(string: "\(baseURL)/api/stations/nearby")!
         components.queryItems = [
             URLQueryItem(name: "lat", value: "\(lat)"),
             URLQueryItem(name: "lng", value: "\(lng)"),
@@ -44,7 +44,7 @@ class FuelFinderAPI {
     // MARK: - Station Detail
     
     func stationDetail(stationId: String) async throws -> StationDetail {
-        let url = URL(string: "\(baseURL)/stations/\(stationId)")!
+        let url = URL(string: "\(baseURL)/api/stations/\(stationId)")!
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -62,7 +62,7 @@ class FuelFinderAPI {
         radius: Double = 15.0,
         tankLitres: Double = 40.0
     ) async throws -> FillNowResponse {
-        var components = URLComponents(string: "\(baseURL)/recommendation/fill-now")!
+        var components = URLComponents(string: "\(baseURL)/api/recommendation/fill-now")!
         components.queryItems = [
             URLQueryItem(name: "lat", value: "\(lat)"),
             URLQueryItem(name: "lng", value: "\(lng)"),
