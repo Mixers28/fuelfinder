@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.services.fuel_finder_csv import import_fuel_finder_csv_bytes, import_fuel_finder_csv_url
+from app.services.ingestion import refresh_stations, refresh_prices
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -22,6 +23,16 @@ def _require_admin_token(x_admin_token: str | None):
         raise HTTPException(status_code=404, detail="Not found")
     if x_admin_token != expected:
         raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@router.post("/refresh-stations")
+async def force_refresh_stations(x_admin_token: str | None = Header(default=None)):
+    """Force an immediate re-fetch of all station data from all providers."""
+    _require_admin_token(x_admin_token)
+    await refresh_stations()
+    await refresh_prices()
+    from app.database import get_cache_counts
+    return {"ok": True, "cache_counts": await get_cache_counts()}
 
 
 @router.post("/import/fuel-finder-csv")
