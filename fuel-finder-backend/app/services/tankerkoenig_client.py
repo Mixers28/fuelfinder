@@ -14,6 +14,7 @@ Fuel type mapping:
 """
 
 import logging
+from datetime import datetime, timezone
 import httpx
 from app.config import get_settings
 
@@ -92,7 +93,7 @@ async def fetch_stations_de() -> list[dict]:
                                 "fuel_type": fuel_type,
                                 # Tankerkönig gives EUR/L — multiply by 100 for euro cents/L
                                 "pence_per_litre": round(val * 100, 2),
-                                "updated_at": s.get("lastChange", ""),
+                                "updated_at": s.get("lastChange") or datetime.now(timezone.utc).isoformat(),
                             })
 
                     stations.append({

@@ -54,7 +54,7 @@ def _row_to_summary(row: dict, user_lat: float, user_lng: float, fuel_type: str)
         price = FuelPrice(
             fuel_type=FuelType(fuel_type),
             pence_per_litre=ppl,
-            updated_at=row.get("price_updated_at", row.get("updated_at", "2026-01-01T00:00:00Z")),
+            updated_at=row.get("price_updated_at") or row.get("updated_at") or "2026-01-01T00:00:00Z",
             currency=CURRENCY_FOR_COUNTRY.get(country, "GBP"),
         )
     return StationSummary(
@@ -125,7 +125,7 @@ async def station_detail(station_id: str) -> StationDetail | None:
         FuelPrice(
             fuel_type=FuelType(p["fuel_type"]),
             pence_per_litre=p["pence_per_litre"],
-            updated_at=p["updated_at"],
+            updated_at=p["updated_at"] or "2026-01-01T00:00:00Z",
             currency=currency,
         )
         for p in price_rows
