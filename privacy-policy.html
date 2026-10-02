@@ -17,27 +17,32 @@
 <body>
 
   <h1>Privacy Policy</h1>
-  <p class="subtitle">Fuel Finder &mdash; Last updated 16 June 2026</p>
+  <p class="subtitle">Fuel Finder &mdash; Last updated 2 October 2026</p>
 
-  <p>Fuel Finder is a free app that shows live UK fuel prices near you. This policy explains what data the app uses and why.</p>
+  <p>Fuel Finder is a free app that shows nearby fuel prices. This policy explains what data the app uses and why.</p>
 
   <h2>What we collect</h2>
-  <p>We collect <strong>nothing</strong>. No account is required. No personal information is stored by us at any point.</p>
+  <p>No account is required. We do not create user profiles or keep location histories. Shared fuel-price caches contain station information without user or device identifiers.</p>
 
   <h2>Location</h2>
   <p>The app requests your location <strong>while in use</strong> solely to find fuel stations near you. Your coordinates are sent as a query to our server to calculate distances and return nearby results. They are:</p>
   <ul>
-    <li>Never written to a database or log file</li>
-    <li>Never shared with third parties</li>
+    <li>Not saved in the application's database or application request logs</li>
+    <li>Not sent to fuel-price providers as precise user coordinates</li>
     <li>Discarded immediately after the response is sent</li>
   </ul>
-  <p>You can revoke location access at any time in <strong>Settings &rarr; Privacy &amp; Security &rarr; Location Services &rarr; Fuel Finder</strong>. The app will not function without it.</p>
+  <p>For German prices, we round the search centre to a shared area on an approximately one-kilometre grid and send that centre to Tankerkönig. We cache the area's station data so nearby searches can reuse it. The area cache does not contain a user identifier, device identifier, or IP address.</p>
+  <p>You can revoke location access at any time in <strong>Settings &rarr; Privacy &amp; Security &rarr; Location Services &rarr; Fuel Finder</strong>. You can still search by town or postcode and open your favourites without location permission. A manually selected place is used as the search centre instead of your device location.</p>
+
+  <h2>Saved preferences</h2>
+  <p>Your fuel choice and favourite station names, addresses and coordinates are saved in the app's storage on your device. Favourites do not save fuel prices or your location. You can remove favourites in the app. We do not keep a history of your searches.</p>
 
   <h2>Fuel price data</h2>
-  <p>Prices are sourced from the <a href="https://www.fuel-finder.service.gov.uk">GOV.UK Fuel Finder API</a>, published under the Motor Fuel Price Open Data Regulations 2025. We cache this data on our server to reduce load on the government API. No user data is associated with this cache.</p>
+  <p>UK prices are sourced from the <a href="https://www.fuel-finder.service.gov.uk">GOV.UK Fuel Finder API</a>. German prices come from <a href="https://creativecommons.tankerkoenig.de/">Tankerkönig</a>. We cache station and price data on our server to reduce repeated provider requests. No user identifier is associated with this cache.</p>
 
   <h2>Third-party services</h2>
-  <p>Our server runs on <a href="https://railway.app">Railway</a>. Only anonymised infrastructure logs (standard HTTP access logs, retained by Railway per their own policy) may be generated. We do not enable any additional logging.</p>
+  <p>Town and postcode queries are sent to Apple Maps to find matching places. The selected place's coordinates are sent to our server to find fuel prices. Maps displayed in the app and driving directions opened in Apple Maps use Apple's services and are subject to <a href="https://www.apple.com/legal/privacy/">Apple's privacy policy</a>.</p>
+  <p>Hosting providers may generate infrastructure and access logs under their own policies. The application disables request logs that would contain precise coordinates or provider API keys.</p>
   <p>No analytics SDKs, advertising networks, or tracking frameworks are included in the app.</p>
 
   <h2>Children</h2>

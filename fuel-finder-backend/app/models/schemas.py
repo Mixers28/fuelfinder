@@ -65,6 +65,7 @@ class NearbyResponse(BaseModel):
     user_lat: float
     user_lng: float
     radius_miles: float
+    notice: str | None = None
 
 
 class WorthItRecommendation(BaseModel):
@@ -82,3 +83,4 @@ class FillNowResponse(BaseModel):
     cheapest: StationSummary
     nearest: StationSummary
     recommendation: WorthItRecommendation
+    notice: str | None = None

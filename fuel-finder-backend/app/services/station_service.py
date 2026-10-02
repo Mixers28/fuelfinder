@@ -3,10 +3,11 @@ from __future__ import annotations
 """Station query service: nearby search, sorting, worth-it recommendation."""
 
 import json
-import math
-from datetime import datetime
 from app.database import get_all_stations_with_fuel, get_station, get_station_prices
-from app.services.country_detector import CURRENCY_FOR_COUNTRY
+from app.services.country_detector import CURRENCY_FOR_COUNTRY, in_country_box
+from app.services.geo import haversine_miles
+from app.services.german_search import get_german_stations
+from app.services.tankerkoenig_client import GermanPricesUnavailable
 from app.models.schemas import (
     StationSummary,
     StationDetail,
@@ -17,20 +18,6 @@ from app.models.schemas import (
     FillNowResponse,
     SortBy,
 )
-
-
-def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance between two points in miles."""
-    R = 3958.8  # Earth radius in miles
-    d_lat = math.radians(lat2 - lat1)
-    d_lon = math.radians(lon2 - lon1)
-    a = (
-        math.sin(d_lat / 2) ** 2
-        + math.cos(math.radians(lat1))
-        * math.cos(math.radians(lat2))
-        * math.sin(d_lon / 2) ** 2
-    )
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 # Plausible price bounds per country (minor currency units per litre)
@@ -81,13 +68,35 @@ async def nearby_stations(
     country: str = "uk",
 ) -> NearbyResponse:
     """Find stations near (lat, lng) with prices for fuel_type."""
-    rows = await get_all_stations_with_fuel(fuel_type.value, country)
+    # Both EUR providers can contribute near the border. German results come
+    # only from a complete area snapshot, never the old fixed-city cache.
+    euro_search = country in ("de", "nl")
+    rows = await get_all_stations_with_fuel(fuel_type.value, "nl" if euro_search else country)
+    notice = None
+    german_error = None
+    if euro_search and in_country_box(lat, lng, "de"):
+        try:
+            area = await get_german_stations(lat, lng, radius_miles)
+            radius_miles = area.radius_miles
+            notice = area.notice
+            for station in area.stations:
+                for price in station["prices"]:
+                    if price["fuel_type"] == fuel_type.value:
+                        rows.append({**station, **price, "price_updated_at": price["updated_at"]})
+        except GermanPricesUnavailable as exc:
+            # An unavailable DE provider must not break usable Dutch results.
+            german_error = exc
 
     summaries = []
     for row in rows:
         s = _row_to_summary(row, lat, lng, fuel_type.value)
         if s is not None and s.distance_miles <= radius_miles:
             summaries.append(s)
+
+    if german_error:
+        if not summaries:
+            raise german_error
+        notice = "German prices are temporarily unavailable. Showing nearby Dutch stations only."
 
     # Sort
     if sort_by == SortBy.price:
@@ -107,6 +116,7 @@ async def nearby_stations(
         user_lat=lat,
         user_lng=lng,
         radius_miles=radius_miles,
+        notice=notice,
     )
 
 
@@ -182,17 +192,18 @@ def compute_worth_it(
     net_saving = tank_saving_pence - extra_fuel_cost_pence
     worth_it = net_saving > 0 and saving_per_litre > 0
 
+    minor_unit = "c" if target.price.currency == "EUR" else "p"
     if worth_it:
         explanation = (
-            f"Save {saving_per_litre:.1f}p/L at {target.trading_name}. "
-            f"Extra {extra_miles:.1f} mile round trip costs ~{extra_fuel_cost_pence:.0f}p in fuel. "
-            f"Net saving ~{net_saving:.0f}p on a {tank_litres:.0f}L fill."
+            f"Save {saving_per_litre:.1f}{minor_unit}/L at {target.trading_name}. "
+            f"Extra {extra_miles:.1f} mile round trip costs ~{extra_fuel_cost_pence:.0f}{minor_unit} in fuel. "
+            f"Net saving ~{net_saving:.0f}{minor_unit} on a {tank_litres:.0f}L fill."
         )
         rec_id = target.station_id
         rec_name = target.trading_name
     else:
         explanation = (
-            f"Cheapest is {target.trading_name} ({saving_per_litre:.1f}p/L less), "
+            f"Cheapest is {target.trading_name} ({saving_per_litre:.1f}{minor_unit}/L less), "
             f"but the {extra_miles:.1f} mile detour wipes out the saving. "
             f"Fill at {baseline.trading_name} instead."
         )
@@ -234,4 +245,5 @@ async def fill_now_recommendation(
         cheapest=result.cheapest,
         nearest=result.nearest,
         recommendation=recommendation,
+        notice=result.notice,
     )

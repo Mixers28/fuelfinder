@@ -2,10 +2,10 @@ import SwiftUI
 
 struct StationDetailView: View {
     let stationId: String
-    let fuelType: FuelType
+    var savedStation: SavedStation? = nil
+    @EnvironmentObject private var preferences: UserPreferences
     
     @State private var detail: StationDetail?
-    @State private var fillNow: FillNowResponse?
     @State private var isLoading = true
     @State private var errorMessage: String?
     
@@ -15,15 +15,28 @@ struct StationDetailView: View {
                 ProgressView()
                     .padding(.top, 40)
             } else if let error = errorMessage {
-                Text(error)
-                    .foregroundStyle(.secondary)
-                    .padding()
+                VStack(spacing: 16) {
+                    Text(error).foregroundStyle(.secondary)
+                    Button("Retry") { Task { await loadData() } }
+                    if let savedStation {
+                        Text("\(savedStation.address) \(savedStation.postcode)")
+                        DirectionsButton(station: savedStation).buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding()
             } else if let detail {
                 content(detail)
             }
         }
-        .navigationTitle(detail?.tradingName ?? "Station")
+        .navigationTitle(detail?.tradingName ?? savedStation?.name ?? "Station")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let station = detail.map({ SavedStation($0) }) ?? savedStation {
+                ToolbarItem(placement: .topBarTrailing) {
+                    FavouriteButton(station: station)
+                }
+            }
+        }
         .task { await loadData() }
     }
     
@@ -32,6 +45,10 @@ struct StationDetailView: View {
     @ViewBuilder
     private func content(_ station: StationDetail) -> some View {
         VStack(alignment: .leading, spacing: 20) {
+            DirectionsButton(station: SavedStation(station))
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal)
             // Address
             VStack(alignment: .leading, spacing: 4) {
                 Text(station.address)
@@ -51,6 +68,11 @@ struct StationDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Fuel Prices")
                     .font(.headline)
+
+                if station.prices.isEmpty {
+                    Text("No prices available. The station may be closed or awaiting an update.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
                 
                 ForEach(station.prices) { price in
                     HStack {
@@ -59,6 +81,7 @@ struct StationDetailView: View {
                             .frame(width: 8, height: 8)
                         Text(price.fuelType.displayName)
                             .font(.subheadline)
+                            .fontWeight(price.fuelType == preferences.fuelType ? .bold : .regular)
                         Spacer()
                         Text(price.formattedPrice)
                             .font(.subheadline.bold().monospacedDigit())
@@ -77,12 +100,6 @@ struct StationDetailView: View {
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
-            
-            // Worth it recommendation
-            if let rec = fillNow?.recommendation {
-                worthItCard(rec)
-                    .padding(.horizontal)
-            }
             
             // Amenities
             if !station.amenities.isEmpty {
@@ -107,31 +124,6 @@ struct StationDetailView: View {
         .padding(.vertical)
     }
     
-    // MARK: - Worth It Card
-    
-    private func worthItCard(_ rec: WorthItRecommendation) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: rec.worthDriving ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .foregroundStyle(rec.worthDriving ? .green : .red)
-                Text(rec.worthDriving ? "Worth the drive" : "Not worth the drive")
-                    .font(.subheadline.bold())
-            }
-            
-            Text(rec.explanation)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(rec.worthDriving ? Color.green.opacity(0.08) : Color.red.opacity(0.08))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(rec.worthDriving ? Color.green.opacity(0.3) : Color.red.opacity(0.3), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-    
     // MARK: - Helpers
     
     private func colorForFuel(_ type: FuelType) -> Color {
@@ -149,17 +141,20 @@ struct StationDetailView: View {
         case "atm": return "🏧 ATM"
         case "air": return "💨 Air"
         case "car_wash": return "🚗 Car wash"
-        default: return key.capitalized
+        default: return key.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
     
     private func loadData() async {
+        isLoading = true
+        errorMessage = nil
         do {
-            async let detailTask = FuelFinderAPI.shared.stationDetail(stationId: stationId)
-            // fillNow needs location — in production, pass from parent
-            detail = try await detailTask
+            let result = try await FuelFinderAPI.shared.stationDetail(stationId: stationId)
+            try Task.checkCancellation()
+            detail = result
             isLoading = false
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
             isLoading = false
         }

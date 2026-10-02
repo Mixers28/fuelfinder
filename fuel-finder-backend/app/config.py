@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # Germany — Tankerkönig (creativecommons.tankerkoenig.de)
     tankerkoenig_api_key: str = ""
+    tankerkoenig_stale_ttl: int = 3600  # Maximum cached age during provider outages
 
     # Netherlands — ANWB (api.anwb.nl, key from app traffic interception)
     anwb_api_key: str = ""

@@ -2,7 +2,6 @@
 
 import logging
 from app.services.fuel_finder_client import fuel_finder_client
-from app.services.tankerkoenig_client import fetch_stations_de
 from app.services.anwb_client import fetch_stations_nl
 from app.database import bulk_upsert_stations, bulk_upsert_prices, get_cache_age_seconds
 from app.config import get_settings
@@ -11,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 async def refresh_stations():
-    """Fetch station metadata for all active countries and cache locally."""
+    """Refresh UK/NL data. German areas are fetched when users search."""
     settings = get_settings()
 
     # UK
@@ -28,19 +27,6 @@ async def refresh_stations():
     else:
         logger.info("UK: skipping API station refresh because UK_DATA_SOURCE=%s", settings.uk_data_source)
 
-    # Germany
-    try:
-        stations_de = await fetch_stations_de()
-        if stations_de:
-            await bulk_upsert_stations(stations_de)
-            # Prices are bundled with stations from Tankerkönig
-            prices_de = [p for s in stations_de for p in s.get("prices", [])]
-            if prices_de:
-                await bulk_upsert_prices(prices_de)
-            logger.info("DE: cached %d stations, %d prices", len(stations_de), len(prices_de))
-    except Exception:
-        logger.exception("DE: failed to refresh stations")
-
     # Netherlands
     try:
         stations_nl = await fetch_stations_nl()
@@ -55,7 +41,7 @@ async def refresh_stations():
 
 
 async def refresh_prices():
-    """Fetch UK fuel prices and cache locally. DE/NL prices come with stations."""
+    """Refresh UK prices. NL prices come with stations; DE refreshes on demand."""
     settings = get_settings()
     if settings.uk_data_source != "api":
         logger.info("UK: skipping API price refresh because UK_DATA_SOURCE=%s", settings.uk_data_source)

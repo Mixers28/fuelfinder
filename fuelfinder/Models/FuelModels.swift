@@ -9,14 +9,14 @@ enum FuelType: String, Codable, CaseIterable, Identifiable {
     
     var displayName: String {
         switch self {
-        case .E10: return "Unleaded (E10)"
-        case .E5: return "Super (E5)"
-        case .B7: return "Diesel (B7)"
+        case .E10: return "Unleaded Petrol"
+        case .E5: return "Super Unleaded"
+        case .B7: return "Diesel"
         case .SDV: return "Premium Diesel"
         }
     }
     
-    var shortName: String { rawValue }
+    var shortName: String { displayName }
 }
 
 enum SortOrder: String {
@@ -137,6 +137,7 @@ struct NearbyResponse: Codable {
     let userLat: Double
     let userLng: Double
     let radiusMiles: Double
+    let notice: String?
     
     enum CodingKeys: String, CodingKey {
         case stations, cheapest, nearest, total
@@ -144,6 +145,7 @@ struct NearbyResponse: Codable {
         case userLat = "user_lat"
         case userLng = "user_lng"
         case radiusMiles = "radius_miles"
+        case notice
     }
 }
 
@@ -152,9 +154,20 @@ struct FillNowResponse: Codable {
     let cheapest: StationSummary
     let nearest: StationSummary
     let recommendation: WorthItRecommendation
+    let notice: String?
+
+    var oldestComparedPrice: FuelPrice? {
+        [cheapest.price, nearest.price].compactMap { $0 }.min { $0.updatedAt < $1.updatedAt }
+    }
+
+    var hasOlderPriceReports: Bool {
+        guard let price = oldestComparedPrice else { return true }
+        return Date().timeIntervalSince(price.updatedAt) > 24 * 60 * 60
+    }
     
     enum CodingKeys: String, CodingKey {
         case fuelType = "fuel_type"
         case cheapest, nearest, recommendation
+        case notice
     }
 }

@@ -10,6 +10,7 @@ or concurrent write throughput from multiple ingestion workers.
 import aiosqlite
 import json
 import logging
+import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,6 +62,17 @@ CREATE TABLE IF NOT EXISTS csv_imports (
     rows_seen INTEGER NOT NULL,
     rows_skipped INTEGER NOT NULL,
     imported_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS german_area_cache (
+    area_key TEXT PRIMARY KEY,
+    stations_json TEXT NOT NULL,
+    fetched_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS provider_request_limits (
+    provider TEXT PRIMARY KEY,
+    next_allowed_at REAL NOT NULL
 );
 """
 
@@ -266,6 +278,84 @@ async def replace_country_cache(country: str, stations: list[dict], prices: list
                 )
                 for p in prices
             ],
+        )
+        await db.commit()
+
+
+async def get_german_area(area_key: str) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT stations_json, fetched_at FROM german_area_cache WHERE area_key = ?",
+            (area_key,),
+        )
+        row = await cursor.fetchone()
+        return {"stations": json.loads(row[0]), "fetched_at": row[1]} if row else None
+
+
+async def store_german_area(
+    area_key: str, stations: list[dict], fetched_at: float, retention_seconds: int,
+):
+    """Store a complete area snapshot, including successful empty responses."""
+    await bulk_upsert_stations(stations)
+    timestamp = datetime.fromtimestamp(fetched_at, timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Replace the reported stations' prices so closures and missing fuels
+        # cannot leave an old, cheaper price behind in station detail results.
+        await db.executemany(
+            "DELETE FROM fuel_prices WHERE station_id = ?",
+            [(station["station_id"],) for station in stations],
+        )
+        await db.executemany(
+            """INSERT INTO fuel_prices
+               (station_id, fuel_type, pence_per_litre, updated_at, fetched_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            [
+                (price["station_id"], price["fuel_type"], price["pence_per_litre"],
+                 price["updated_at"], timestamp)
+                for station in stations for price in station["prices"]
+            ],
+        )
+        await db.execute(
+            """INSERT INTO german_area_cache (area_key, stations_json, fetched_at)
+               VALUES (?, ?, ?) ON CONFLICT(area_key) DO UPDATE SET
+               stations_json=excluded.stations_json, fetched_at=excluded.fetched_at""",
+            (area_key, json.dumps(stations), fetched_at),
+        )
+        await db.execute(
+            "DELETE FROM german_area_cache WHERE fetched_at < ?",
+            (fetched_at - retention_seconds,),
+        )
+        await db.commit()
+
+
+async def reserve_provider_request(provider: str, now: float, interval_seconds: int) -> int:
+    """Atomically reserve a request across workers; return seconds to retry."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("BEGIN IMMEDIATE")
+        cursor = await db.execute(
+            "SELECT next_allowed_at FROM provider_request_limits WHERE provider = ?", (provider,),
+        )
+        row = await cursor.fetchone()
+        if row and row[0] > now:
+            await db.rollback()
+            return math.ceil(row[0] - now)
+        await db.execute(
+            """INSERT INTO provider_request_limits (provider, next_allowed_at)
+               VALUES (?, ?) ON CONFLICT(provider) DO UPDATE SET
+               next_allowed_at=excluded.next_allowed_at""",
+            (provider, now + interval_seconds),
+        )
+        await db.commit()
+        return 0
+
+
+async def defer_provider_requests(provider: str, next_allowed_at: float):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO provider_request_limits (provider, next_allowed_at)
+               VALUES (?, ?) ON CONFLICT(provider) DO UPDATE SET
+               next_allowed_at=MAX(provider_request_limits.next_allowed_at, excluded.next_allowed_at)""",
+            (provider, next_allowed_at),
         )
         await db.commit()
 

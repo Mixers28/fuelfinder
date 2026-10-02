@@ -5,7 +5,13 @@ import Foundation
 class FuelFinderAPI {
     static let shared = FuelFinderAPI()
     
-    private let baseURL = "https://fuel-finder.chaosisaladder.co.uk"
+    private let baseURL: String
+    private let session: URLSession
+
+    init(baseURL: String = "https://fuel-finder.chaosisaladder.co.uk", session: URLSession = .shared) {
+        self.baseURL = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
+        self.session = session
+    }
     
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -23,7 +29,7 @@ class FuelFinderAPI {
         radius: Double = 15.0,
         limit: Int = 20
     ) async throws -> NearbyResponse {
-        var components = URLComponents(string: "\(baseURL)/api/stations/nearby")!
+        var components = URLComponents(string: "\(baseURL)/stations/nearby")!
         components.queryItems = [
             URLQueryItem(name: "lat", value: "\(lat)"),
             URLQueryItem(name: "lng", value: "\(lng)"),
@@ -33,10 +39,10 @@ class FuelFinderAPI {
             URLQueryItem(name: "limit", value: "\(limit)"),
         ]
         
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await session.data(from: components.url!)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            throw APIError.badResponse
+            throw responseError(data: data)
         }
         return try decoder.decode(NearbyResponse.self, from: data)
     }
@@ -44,11 +50,11 @@ class FuelFinderAPI {
     // MARK: - Station Detail
     
     func stationDetail(stationId: String) async throws -> StationDetail {
-        let url = URL(string: "\(baseURL)/api/stations/\(stationId)")!
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let url = URL(string: "\(baseURL)/stations/\(stationId)")!
+        let (data, response) = try await session.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            throw APIError.badResponse
+            throw responseError(data: data)
         }
         return try decoder.decode(StationDetail.self, from: data)
     }
@@ -62,7 +68,7 @@ class FuelFinderAPI {
         radius: Double = 15.0,
         tankLitres: Double = 40.0
     ) async throws -> FillNowResponse {
-        var components = URLComponents(string: "\(baseURL)/api/recommendation/fill-now")!
+        var components = URLComponents(string: "\(baseURL)/recommendation/fill-now")!
         components.queryItems = [
             URLQueryItem(name: "lat", value: "\(lat)"),
             URLQueryItem(name: "lng", value: "\(lng)"),
@@ -71,23 +77,35 @@ class FuelFinderAPI {
             URLQueryItem(name: "tank_litres", value: "\(tankLitres)"),
         ]
         
-        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        let (data, response) = try await session.data(from: components.url!)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            throw APIError.badResponse
+            throw responseError(data: data)
         }
         return try decoder.decode(FillNowResponse.self, from: data)
+    }
+
+    private func responseError(data: Data) -> APIError {
+        struct ErrorResponse: Decodable {
+            let detail: String
+        }
+        if let error = try? decoder.decode(ErrorResponse.self, from: data) {
+            return .serverMessage(error.detail)
+        }
+        return .badResponse
     }
 }
 
 enum APIError: LocalizedError {
     case badResponse
     case decodingFailed
+    case serverMessage(String)
     
     var errorDescription: String? {
         switch self {
         case .badResponse: return "Server returned an error"
         case .decodingFailed: return "Failed to parse response"
+        case .serverMessage(let message): return message
         }
     }
 }

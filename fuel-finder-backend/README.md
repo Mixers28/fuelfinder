@@ -245,10 +245,65 @@ Retailers must update prices within 30 minutes of any change.
 
 Data quality depends on retailer compliance. The CMA enforces participation.
 
+## German Price Coverage
+
+Set `TANKERKOENIG_API_KEY` to enable location-based searches throughout Germany.
+Nearby searches and fill recommendations fetch the requested area when its
+cache is missing or expired; there is no fixed city list or scheduled German
+grid import. Station details read prices saved by these searches.
+
+- A query uses a shared area centre rounded to two decimal places, without a
+  user/device identifier. Exact user coordinates are used only for distance
+  calculations and are not saved in the area cache or sent to Tankerkönig.
+- One request fetches all three supported fuels within the provider's 25 km
+  limit. The returned `radius_miles` reflects the fully covered radius around
+  the user, accounting for the offset to the shared centre. The default 15 mile
+  search fits inside this circle; larger requests receive a smaller radius and
+  a `notice` explaining the coverage.
+- Successful area snapshots, including empty ones, are stored in SQLite for
+  `PRICE_CACHE_TTL` seconds (default 900). Fuel changes and repeat searches reuse
+  the same snapshot. Previously imported city-cache rows are not used to fill
+  gaps in an area snapshot. Closed stations and unavailable fuels lose their
+  previous prices when refreshed.
+- The [free provider API](https://creativecommons.tankerkoenig.de/) documents
+  one request per minute. SQLite stores an atomic request reservation shared by
+  workers using the same database, and preserves it across restarts. Requests
+  waiting for another area's reservation receive HTTP 503 with `Retry-After`.
+  The scheduler no longer consumes German requests. Separate deployments using
+  the same provider key need a shared limiter or separate provider agreement.
+- On provider failure, a snapshot no older than `TANKERKOENIG_STALE_TTL` (default
+  3600 seconds) may be returned with a cached-price `notice`. Older or missing
+  data produces a clear HTTP 503 error instead of an empty success response.
+  Provider error bodies and URLs containing API keys are not exposed to clients.
+- Application request logging omits provider URLs and user-coordinate URLs.
+  Review reverse-proxy access-log settings separately when deploying.
+
+The iOS app displays cache/coverage notices and server retry messages. Existing
+clients can still decode successful responses because `notice` is optional.
+No new service or dependency is needed; startup creates the two cache/limiter
+tables in the existing SQLite database. Keep its persistent deployment volume.
+
 ## Known Limitations
 
+- New German areas are subject to the provider's one-request-per-minute limit;
+  a busier deployment needs an appropriate provider plan.
+- Country bounding boxes are approximate. German and Dutch searches include
+  both providers' available stations and filter by distance, so western German
+  cities are not excluded by the overlapping Netherlands box. Both use EUR;
+  UK searches remain separate in GBP.
 - Price history requires running the backend continuously to accumulate snapshots
 - SQLite is single-writer; fine for one backend instance, needs PostgreSQL for horizontal scaling
 - Haversine distance is calculated in Python; acceptable for <10k stations per query
 - Not all stations report all fuel types
 - Some independent stations may report late or inaccurately
+
+## Regression Checks
+
+Run from `fuel-finder-backend` after installing `requirements.txt`:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+These use a temporary SQLite cache and mocked provider responses; they do not
+call external services or change the local station cache.

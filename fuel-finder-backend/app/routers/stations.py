@@ -20,8 +20,8 @@ router = APIRouter(prefix="/api", tags=["stations"])
 
 @router.get("/stations/nearby", response_model=NearbyResponse)
 async def get_nearby_stations(
-    lat: float = Query(..., description="User latitude"),
-    lng: float = Query(..., description="User longitude"),
+    lat: float = Query(..., ge=-90, le=90, description="User latitude"),
+    lng: float = Query(..., ge=-180, le=180, description="User longitude"),
     fuel_type: FuelType = Query(FuelType.E10, description="Fuel type to search"),
     radius: float = Query(15.0, ge=0.5, le=50, description="Search radius in miles"),
     sort: SortBy = Query(SortBy.price, description="Sort order"),
@@ -61,8 +61,8 @@ async def get_price_history(station_id: str):
 
 @router.get("/recommendation/fill-now", response_model=FillNowResponse)
 async def get_fill_recommendation(
-    lat: float = Query(..., description="User latitude"),
-    lng: float = Query(..., description="User longitude"),
+    lat: float = Query(..., ge=-90, le=90, description="User latitude"),
+    lng: float = Query(..., ge=-180, le=180, description="User longitude"),
     fuel_type: FuelType = Query(FuelType.E10),
     radius: float = Query(15.0, ge=0.5, le=50),
     tank_litres: float = Query(40.0, ge=10, le=100, description="Tank size in litres"),

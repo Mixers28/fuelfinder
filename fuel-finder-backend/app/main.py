@@ -11,6 +11,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.routers import stations as station_routes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -21,8 +22,13 @@ from app.routers.diagnostics import router as diagnostics_router
 from app.routers.admin_import import router as admin_import_router
 from app.services.ingestion import refresh_stations, refresh_prices, refresh_if_stale
 from app.config import get_settings
+from app.services.tankerkoenig_client import GermanPricesUnavailable
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+# HTTPX request URLs include the provider API key. Uvicorn access URLs include
+# precise user coordinates. Neither belongs in application logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").disabled = True
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
@@ -71,6 +77,12 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(GermanPricesUnavailable)
+async def german_prices_unavailable(_request, exc: GermanPricesUnavailable):
+    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else {}
+    return JSONResponse(status_code=503, content={"detail": str(exc)}, headers=headers)
 
 # CORS — allow the iOS app and local dev
 app.add_middleware(

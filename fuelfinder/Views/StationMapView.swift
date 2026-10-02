@@ -3,28 +3,25 @@ import SwiftUI
 
 struct StationMapView: View {
     let stations: [StationSummary]
-    let userCoordinate: CLLocationCoordinate2D
+    let searchLocation: SearchLocation
     let cheapestId: String?
     let nearestId: String?
-    let selectedFuelType: FuelType
 
     @State private var selectedStation: StationSummary?
     @State private var position: MapCameraPosition
 
     init(
         stations: [StationSummary],
-        userCoordinate: CLLocationCoordinate2D,
+        searchLocation: SearchLocation,
         cheapestId: String?,
-        nearestId: String?,
-        selectedFuelType: FuelType
+        nearestId: String?
     ) {
         self.stations = stations
-        self.userCoordinate = userCoordinate
+        self.searchLocation = searchLocation
         self.cheapestId = cheapestId
         self.nearestId = nearestId
-        self.selectedFuelType = selectedFuelType
         _position = State(initialValue: .region(MKCoordinateRegion(
-            center: userCoordinate,
+            center: CLLocationCoordinate2D(latitude: searchLocation.latitude, longitude: searchLocation.longitude),
             latitudinalMeters: 25000,
             longitudinalMeters: 25000
         )))
@@ -32,7 +29,14 @@ struct StationMapView: View {
 
     var body: some View {
         Map(position: $position) {
-            UserAnnotation()
+            if searchLocation.isCurrentLocation {
+                UserAnnotation()
+            } else {
+                Marker(searchLocation.name, systemImage: "magnifyingglass", coordinate: CLLocationCoordinate2D(
+                    latitude: searchLocation.latitude, longitude: searchLocation.longitude
+                ))
+                .tint(.blue)
+            }
             ForEach(stations) { station in
                 let coord = CLLocationCoordinate2D(
                     latitude: station.latitude,
@@ -55,7 +59,9 @@ struct StationMapView: View {
             }
         }
         .mapControls {
-            MapUserLocationButton()
+            if searchLocation.isCurrentLocation {
+                MapUserLocationButton()
+            }
             MapCompass()
         }
         .overlay(alignment: .bottom) {

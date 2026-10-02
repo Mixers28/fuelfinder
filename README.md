@@ -1,6 +1,6 @@
 # Fuel Finder
 
-A native iOS app that shows live UK fuel prices near you, backed by a FastAPI server that caches data from the GOV.UK Fuel Finder API.
+A native iOS app that shows nearby UK and German fuel prices, backed by a FastAPI server using GOV.UK Fuel Finder and Tankerkönig.
 
 ![Platform](https://img.shields.io/badge/platform-iOS%2017.6%2B-blue)
 ![Backend](https://img.shields.io/badge/backend-FastAPI-green)
@@ -12,9 +12,14 @@ A native iOS app that shows live UK fuel prices near you, backed by a FastAPI se
 
 - Shows the cheapest nearby petrol and diesel prices using **official government data** (Motor Fuel Price Open Data Regulations 2025)
 - Map view with colour-coded price pins — green for cheapest, blue for nearest
-- Supports E10, E5 (Super), B7 (Diesel), and SDV (Premium Diesel)
-- Sort by price or distance
-- "Fill Now" recommendation — calculates whether it's worth driving to the cheapest station vs the nearest based on fuel saved vs extra miles driven
+- Displays Unleaded Petrol, Super Unleaded, Diesel, and Premium Diesel where available
+- German searches fetch prices around the user's location, with a shared area cache and provider rate limiting
+- Starts with Nearest and Cheapest options using your location, followed by Postcode search; Nearest is the default and orders stations by straight-line distance. Both list and map results keep the Nearest / Cheapest switch visible above postcode search
+- Search towns or postcodes in the UK, Germany and the Netherlands using Apple Maps, without enabling location permission
+- Open driving directions in Apple Maps from a station's details
+- Save favourite stations on the device; swipe a result or use the star on a station's details
+- Remembers the selected fuel between launches
+- Savings recommendation on the results list compares the cheapest station with the nearest, using a 40 L fill, 35 imperial mpg and straight-line distances; actual driving routes can cost more. Reports older than 24 hours show a price-age warning instead of a headline savings claim
 - Prices refresh every hour from the GOV.UK API
 
 ---
@@ -54,6 +59,8 @@ API docs available at `http://localhost:8000/docs`
 | `FUEL_FINDER_BASE_URL` | `https://www.fuel-finder.service.gov.uk` |
 | `PRICE_CACHE_TTL` | Seconds between price refreshes (default `3600`) |
 | `STATION_CACHE_TTL` | Seconds between station refreshes (default `3600`) |
+| `TANKERKOENIG_API_KEY` | Tankerkönig key for location-based German price searches |
+| `TANKERKOENIG_STALE_TTL` | Maximum German cached-price age during outages (default `3600` seconds) |
 
 Register for API credentials at [developer.fuel-finder.service.gov.uk](https://www.developer.fuel-finder.service.gov.uk)
 
@@ -71,10 +78,10 @@ SwiftUI app targeting iOS 17.6+. Open `fuelfinder/fuelfinder.xcodeproj` in Xcode
 
 ### Point at your backend
 
-Edit `fuelfinder/Services/FuelFinderAPI.swift` line 9:
+Edit the default `baseURL` in `fuelfinder/Services/FuelFinderAPI.swift`:
 
 ```swift
-private let baseURL = "https://your-railway-url.railway.app/api"
+init(baseURL: String = "https://your-railway-url.railway.app/api", session: URLSession = .shared)
 ```
 
 ### Key files
@@ -83,22 +90,34 @@ private let baseURL = "https://your-railway-url.railway.app/api"
 |---|---|
 | `Services/FuelFinderAPI.swift` | All API calls to the backend |
 | `Services/LocationManager.swift` | CoreLocation, while-in-use permission |
+| `Services/PlaceSearch.swift` | Apple Maps town/postcode search with country selection and cancellation |
+| `Services/UserPreferences.swift` | Device-local fuel choice and favourite station metadata |
 | `Models/FuelModels.swift` | Codable structs matching backend responses |
 | `Views/ContentView.swift` | Main list view + map/list toggle |
 | `Views/StationMapView.swift` | MapKit map with price-bubble pins |
 | `Views/StationDetailView.swift` | Per-station detail and all fuel prices |
+| `Views/FavouritesView.swift` | Saved stations, favourite actions and Apple Maps directions |
+| `Views/SavingsCard.swift` | Savings estimate and a link to the recommended station |
+
+### Checks
+
+Run the `fuelfinder` scheme's tests in Xcode on an iOS 26.5+ simulator. Unit tests cover preference persistence and API request/error handling; the interface test checks search and favourites access and fuel persistence. For the no-permission check, deny location access in the simulator before running it.
+
+Manually check a town and postcode in each supported country, then select a result, open a station, save it and open driving directions. Search and live prices need a network connection. Favourites store metadata only; their detail screen fetches the latest available server prices and shows each price's age. Directions remain available from saved metadata if prices cannot load.
+
+Backend regression tests: `cd fuel-finder-backend && .venv/bin/python -m unittest discover -s tests -v`.
 
 ---
 
 ## Data source
 
-Fuel prices are sourced from the [GOV.UK Fuel Finder API](https://www.fuel-finder.service.gov.uk), published under the Motor Fuel Price Open Data Regulations 2025. Prices are reported directly by fuel retailers — not crowdsourced.
+UK prices are sourced from the [GOV.UK Fuel Finder API](https://www.fuel-finder.service.gov.uk). German prices come from [Tankerkönig](https://creativecommons.tankerkoenig.de/). See the [backend coverage notes](fuel-finder-backend/README.md#german-price-coverage) for caching and provider limits.
 
 ---
 
 ## Privacy
 
-No user data is collected or stored. Location is used only to find nearby stations and is discarded immediately after each request. See [privacy policy](privacy-policy.html) for full details.
+No account or search/location history is kept. Favourites and fuel choice are stored on the device. Apple Maps resolves town/postcode searches and handles directions. Exact search coordinates are used for nearby results; German provider queries use a shared area centre rounded to roughly a kilometre. Area caches contain station data without user or device identifiers. The privacy manifest declares app-only UserDefaults access using [Apple's CA92.1 reason](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitypereasons). See the [privacy policy](privacy-policy.html).
 
 ---
 
