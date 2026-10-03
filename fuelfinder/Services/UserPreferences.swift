@@ -32,7 +32,7 @@ final class UserPreferences: ObservableObject {
         if contains(station.id) {
             remove(station.id)
         } else {
-            favourites.append(station)
+            favourites.append(station.isPetromap ? SavedStation(referenceID: station.id) : station)
             persistFavourites()
         }
     }

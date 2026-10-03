@@ -17,7 +17,9 @@ class Settings(BaseSettings):
     tankerkoenig_api_key: str = ""
     tankerkoenig_stale_ttl: int = 3600  # Maximum cached age during provider outages
 
-    # Netherlands — ANWB (api.anwb.nl, key from app traffic interception)
+    # Netherlands — approved Petromap developer API access (server only).
+    petromap_api_key: str = ""
+    # Accepted for compatibility with older .env files; no longer used.
     anwb_api_key: str = ""
 
     station_cache_ttl: int = 3600  # 1 hour

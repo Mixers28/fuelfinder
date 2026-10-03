@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from app.routers import stations as station_routes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.database import init_db
+from app.database import init_db, prune_petromap_cache
 from app.models.schemas import FillNowResponse, NearbyResponse, StationDetail
 from app.routers.stations import router as stations_router
 from app.routers.diagnostics import router as diagnostics_router
@@ -23,6 +23,7 @@ from app.routers.admin_import import router as admin_import_router
 from app.services.ingestion import refresh_stations, refresh_prices, refresh_if_stale
 from app.config import get_settings
 from app.services.tankerkoenig_client import GermanPricesUnavailable
+from app.services.petromap_client import DutchPricesUnavailable
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 # HTTPX request URLs include the provider API key. Uvicorn access URLs include
@@ -58,6 +59,12 @@ async def lifespan(app: FastAPI):
         id="refresh_stations",
         replace_existing=True,
     )
+    # Expired Dutch results are removed even when nobody searches. With a
+    # three-hour TTL this stays comfortably inside the provider's 24-hour cap.
+    scheduler.add_job(
+        prune_petromap_cache, "interval", hours=1,
+        id="prune_petromap_cache", replace_existing=True,
+    )
     scheduler.start()
     logger.info(
         "Scheduler started: prices every %ds, stations every %ds",
@@ -72,17 +79,25 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="UK Fuel Finder",
-    description="Backend cache for GOV.UK Fuel Finder price data",
+    title="Fuel Finder",
+    description="UK, German and Dutch fuel prices with server-side provider credentials",
     version="0.1.0",
     lifespan=lifespan,
 )
 
 
 @app.exception_handler(GermanPricesUnavailable)
-async def german_prices_unavailable(_request, exc: GermanPricesUnavailable):
+@app.exception_handler(DutchPricesUnavailable)
+async def provider_prices_unavailable(_request, exc):
     headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else {}
     return JSONResponse(status_code=503, content={"detail": str(exc)}, headers=headers)
+
+
+@app.middleware("http")
+async def prevent_unmanaged_response_caches(request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 # CORS — allow the iOS app and local dev
 app.add_middleware(

@@ -91,7 +91,7 @@ ADMIN_IMPORT_TOKEN=make-this-a-long-random-value
 FUEL_FINDER_BASE_URL=https://www.fuel-finder.service.gov.uk
 FUEL_FINDER_USER_AGENT=FuelFinderBackend/0.1
 TANKERKOENIG_API_KEY=your_tankerkoenig_key
-ANWB_API_KEY=
+PETROMAP_API_KEY=your_approved_petromap_key
 ```
 
 Attach a Railway volume to the backend service. The app automatically stores
@@ -283,6 +283,74 @@ clients can still decode successful responses because `notice` is optional.
 No new service or dependency is needed; startup creates the two cache/limiter
 tables in the existing SQLite database. Keep its persistent deployment volume.
 
+## Dutch Price Coverage
+
+The Netherlands uses the documented [Petromap v2 API](https://developer.petromap.eu/docs/v2).
+The old ANWB client and scheduled Dutch import have been removed. Old ANWB
+station IDs no longer return prices; find the station again and save its new
+Petromap favourite. `ANWB_API_KEY` is accepted in old environment files but ignored.
+
+### Activation
+
+1. Request developer access at [Petromap Developer](https://developer.petromap.eu/),
+   accept its developer agreement in your account and create an approved v2 key.
+2. Set `PETROMAP_API_KEY` in the backend's private `.env` for local use, or the
+   backend service's Railway variables for deployment, then restart the backend.
+   Never put it in the iOS app, source control, URLs or public configuration.
+3. Search Amsterdam and a Dutch postcode in the app, then check Nearest,
+   Cheapest, a station's details and a saved favourite. Check actual station and
+   fuel availability with the key before announcing live coverage. Automated
+   tests use provider fixtures and cannot verify a real account or live prices.
+
+### Requests, credits and caching
+
+- The [Free plan](https://developer.petromap.eu/docs/v2/credits) includes **250
+  credits per account per day**, resetting at midnight UTC. Each search page
+  costs one credit per 20 returned stations, rounded up (minimum one), and a
+  station detail costs one credit. The fuel catalogue is free but authenticated.
+  The provider enforces the account allowance; this integration does not create
+  an account, upgrade a plan or purchase credits. If the account already holds
+  promotional or purchased credits, Petromap can consume them after its daily
+  allowance. Monitor actual usage in the developer dashboard.
+- Only requested areas are fetched, with `country=NL` and the exact fuel grade.
+  The free fuel catalogue maps 95 E10 petrol, 98 E5 super unleaded, standard B7
+  diesel and premium B7 diesel (when listed) to their provider tokens. A family
+  search is not used, since it could substitute a different grade. Unsupported
+  fuels return an explanatory notice without a paid search.
+- Search centres are rounded to a shared .01-degree grid, with a padded radius
+  in whole kilometres. Exact user coordinates and device identifiers are not
+  sent to Petromap or stored in the cache. The provider's 50 km maximum radius
+  yields at most about 30.4 fully covered miles around the user; larger searches
+  receive the actual radius and a coverage notice. Near Germany, the smaller
+  German coverage radius may apply to the combined comparison.
+- Complete, per-area/per-fuel results are cached for **three hours**, following
+  [Petromap's Dutch recommendation](https://developer.petromap.eu/docs/v2/countries).
+  Nearest, Cheapest, limits, nearby coordinates in the same cell and fill
+  recommendations share the cache. Selecting another fuel can use more credits.
+  Station details have their own three-hour cache and work without a prior search.
+- All pages must succeed before a search snapshot is stored. Repeated cursors,
+  failed pages or more than 20 pages produce an error, never a partial cheapest
+  comparison. Missing prices, closed stations and invalid currency/price/source
+  timestamps are excluded. Source timestamps are preserved when data is refreshed.
+- Petromap records live only in the expiring `petromap_cache` table, never in
+  the permanent station/price tables. Expired entries are deleted on cache access,
+  on startup and hourly even without searches. Normal retention is three to
+  four hours, below the [agreement's 24-hour cap](https://developer.petromap.eu/terms).
+  Do not archive this table in long-lived database backups; exclude it or purge
+  it from exports. No station history is accumulated. HTTP responses use
+  `Cache-Control: no-store`, and iOS Dutch favourites persist only the station ID.
+  Opening favourites reloads Dutch metadata; directions require loaded details.
+- Missing keys, failed refreshes and rate/credit limits return a readable HTTP
+  503 instead of an empty station list. Credit exhaustion backs off until
+  midnight UTC; rate limits honour `Retry-After`. Valid cached searches remain
+  usable during a provider outage, but expired snapshots are not returned.
+  Near the border, either working provider can return results with a notice
+  identifying the unavailable country's prices.
+- In-flight work is shared within the default single Uvicorn process. Cache
+  and provider backoff survive restarts in SQLite. Multiple processes or
+  deployments require shared in-flight coordination to avoid duplicate credit
+  spend. The scheduler only deletes expired Dutch data; it spends no credits.
+
 ## Known Limitations
 
 - New German areas are subject to the provider's one-request-per-minute limit;
@@ -291,7 +359,8 @@ tables in the existing SQLite database. Keep its persistent deployment volume.
   both providers' available stations and filter by distance, so western German
   cities are not excluded by the overlapping Netherlands box. Both use EUR;
   UK searches remain separate in GBP.
-- Price history requires running the backend continuously to accumulate snapshots
+- Price history is not implemented. Petromap station records must not be
+  accumulated into a permanent history under the current developer agreement.
 - SQLite is single-writer; fine for one backend instance, needs PostgreSQL for horizontal scaling
 - Haversine distance is calculated in Python; acceptable for <10k stations per query
 - Not all stations report all fuel types

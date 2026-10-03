@@ -18,7 +18,7 @@ struct StationDetailView: View {
                 VStack(spacing: 16) {
                     Text(error).foregroundStyle(.secondary)
                     Button("Retry") { Task { await loadData() } }
-                    if let savedStation {
+                    if let savedStation, savedStation.hasDetails {
                         Text("\(savedStation.address) \(savedStation.postcode)")
                         DirectionsButton(station: savedStation).buttonStyle(.borderedProminent)
                     }

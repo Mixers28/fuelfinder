@@ -3,6 +3,31 @@ import XCTest
 
 final class UserPreferencesTests: XCTestCase {
     @MainActor
+    func testDutchFavouritesPersistOnlyTheProviderReference() async throws {
+        let suite = "FuelFinderTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = UserPreferences(defaults: defaults)
+        let saved = SavedStation(StationDetail(
+            stationId: "nl_pm_NL01000123", tradingName: "Dutch Station", brand: nil,
+            address: "Example Road", postcode: "1012 JS", latitude: 52.37, longitude: 4.90,
+            amenities: [], openingHours: nil, prices: [], country: "nl"
+        ))
+        XCTAssertTrue(saved.hasDetails)
+        preferences.toggle(saved)
+        let data = try XCTUnwrap(defaults.data(forKey: "favouriteStations"))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: String]])
+        XCTAssertEqual(json, [["id": "nl_pm_NL01000123"]])
+        let restored = try XCTUnwrap(UserPreferences(defaults: defaults).favourites.first)
+        XCTAssertEqual(restored.id, saved.id)
+        XCTAssertFalse(restored.hasDetails)
+        XCTAssertEqual(restored.name, "Saved Dutch station")
+        XCTAssertFalse(try XCTUnwrap(preferences.favourites.first).hasDetails)
+        preferences.remove(restored.id)
+        XCTAssertTrue(UserPreferences(defaults: defaults).favourites.isEmpty)
+    }
+
+    @MainActor
     func testFuelAndFavouritesSurviveRelaunchAndRemoval() async throws {
         let suite = "FuelFinderTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

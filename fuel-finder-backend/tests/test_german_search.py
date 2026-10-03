@@ -11,7 +11,8 @@ import httpx
 
 from app import database
 from app.main import app
-from app.services import german_search, tankerkoenig_client
+from app.services import german_search, tankerkoenig_client, station_service
+from app.services.petromap_client import DutchArea
 from app.services.country_detector import in_country_box
 from app.services.geo import KM_PER_MILE, haversine_miles
 
@@ -68,12 +69,18 @@ class GermanSearchTests(unittest.IsolatedAsyncioTestCase):
             for fuel_type in ("E10", "E5", "B7")
         ])
         german_stations = []
+        dutch_stations = []
         for station_id, country, _, _, _ in locations:
-            if country == "de":
+            if country in ("de", "nl"):
                 station = await database.get_station(station_id)
                 station["amenities"] = []
                 station["prices"] = await database.get_station_prices(station_id)
-                german_stations.append(station)
+                (german_stations if country == "de" else dutch_stations).append(station)
+        async def dutch_search(lat, lng, radius, fuel):
+            return DutchArea(dutch_stations, radius)
+        dutch_patch = patch.object(station_service, "get_dutch_stations", side_effect=dutch_search)
+        dutch_patch.start()
+        self.addCleanup(dutch_patch.stop)
         for _, _, lat, lng, _ in locations:
             if in_country_box(lat, lng, "de"):
                 key, area_lat, area_lng = german_search.area_coordinates(lat, lng)

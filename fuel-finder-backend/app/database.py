@@ -14,6 +14,7 @@ import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from time import time
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,14 @@ CREATE TABLE IF NOT EXISTS provider_request_limits (
     provider TEXT PRIMARY KEY,
     next_allowed_at REAL NOT NULL
 );
+
+-- Petromap results must never enter the permanent station/price tables.
+CREATE TABLE IF NOT EXISTS petromap_cache (
+    cache_key TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    expires_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_petromap_expiry ON petromap_cache(expires_at);
 """
 
 
@@ -89,6 +98,33 @@ async def init_db():
             logger.info("DB migration: added country column to stations")
         except Exception:
             pass  # Column already exists
+    await prune_petromap_cache()
+
+
+async def prune_petromap_cache(now: float | None = None):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM petromap_cache WHERE expires_at <= ?", (time() if now is None else now,))
+        await db.commit()
+
+
+async def get_petromap_cache(cache_key: str, now: float):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM petromap_cache WHERE expires_at <= ?", (now,))
+        cursor = await db.execute("SELECT payload_json FROM petromap_cache WHERE cache_key = ?", (cache_key,))
+        row = await cursor.fetchone()
+        await db.commit()
+        return json.loads(row[0]) if row else None
+
+
+async def store_petromap_cache(cache_key: str, payload, expires_at: float):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO petromap_cache (cache_key, payload_json, expires_at) VALUES (?, ?, ?)
+               ON CONFLICT(cache_key) DO UPDATE SET
+               payload_json=excluded.payload_json, expires_at=excluded.expires_at""",
+            (cache_key, json.dumps(payload), expires_at),
+        )
+        await db.commit()
 
 
 async def upsert_station(

@@ -1,6 +1,6 @@
 # Fuel Finder
 
-A native iOS app that shows nearby UK and German fuel prices, backed by a FastAPI server using GOV.UK Fuel Finder and Tankerkönig.
+A native iOS app that shows nearby UK, German and Dutch fuel prices, backed by a FastAPI server using GOV.UK Fuel Finder, Tankerkönig and Petromap. Each provider needs its backend credentials; Dutch prices require approved Petromap developer access.
 
 ![Platform](https://img.shields.io/badge/platform-iOS%2017.6%2B-blue)
 ![Backend](https://img.shields.io/badge/backend-FastAPI-green)
@@ -10,17 +10,18 @@ A native iOS app that shows nearby UK and German fuel prices, backed by a FastAP
 
 ## What it does
 
-- Shows the cheapest nearby petrol and diesel prices using **official government data** (Motor Fuel Price Open Data Regulations 2025)
+- Shows the cheapest nearby petrol and diesel prices; UK prices use **official government data** (Motor Fuel Price Open Data Regulations 2025)
 - Map view with colour-coded price pins — green for cheapest, blue for nearest
 - Displays Unleaded Petrol, Super Unleaded, Diesel, and Premium Diesel where available
 - German searches fetch prices around the user's location, with a shared area cache and provider rate limiting
+- Dutch searches use Petromap on demand, with three-hour caching shared by Nearest, Cheapest and savings comparisons
 - Starts with Nearest and Cheapest options using your location, followed by Postcode search; Nearest is the default and orders stations by straight-line distance. Both list and map results keep the Nearest / Cheapest switch visible above postcode search
 - Search towns or postcodes in the UK, Germany and the Netherlands using Apple Maps, without enabling location permission
 - Open driving directions in Apple Maps from a station's details
 - Save favourite stations on the device; swipe a result or use the star on a station's details
 - Remembers the selected fuel between launches
 - Savings recommendation on the results list compares the cheapest station with the nearest, using a 40 L fill, 35 imperial mpg and straight-line distances; actual driving routes can cost more. Reports older than 24 hours show a price-age warning instead of a headline savings claim
-- Prices refresh every hour from the GOV.UK API
+- UK API prices refresh every 15 minutes by default; CSV deployments refresh on import
 
 ---
 
@@ -57,10 +58,11 @@ API docs available at `http://localhost:8000/docs`
 | `FUEL_FINDER_CLIENT_ID` | GOV.UK Fuel Finder OAuth client ID |
 | `FUEL_FINDER_CLIENT_SECRET` | GOV.UK Fuel Finder OAuth client secret |
 | `FUEL_FINDER_BASE_URL` | `https://www.fuel-finder.service.gov.uk` |
-| `PRICE_CACHE_TTL` | Seconds between price refreshes (default `3600`) |
+| `PRICE_CACHE_TTL` | Seconds between UK price refreshes / fresh German cache lifetime (default `900`) |
 | `STATION_CACHE_TTL` | Seconds between station refreshes (default `3600`) |
 | `TANKERKOENIG_API_KEY` | Tankerkönig key for location-based German price searches |
 | `TANKERKOENIG_STALE_TTL` | Maximum German cached-price age during outages (default `3600` seconds) |
+| `PETROMAP_API_KEY` | Approved Petromap v2 key for Dutch searches; results cached for three hours |
 
 Register for API credentials at [developer.fuel-finder.service.gov.uk](https://www.developer.fuel-finder.service.gov.uk)
 
@@ -103,7 +105,7 @@ init(baseURL: String = "https://your-railway-url.railway.app/api", session: URLS
 
 Run the `fuelfinder` scheme's tests in Xcode on an iOS 26.5+ simulator. Unit tests cover preference persistence and API request/error handling; the interface test checks search and favourites access and fuel persistence. For the no-permission check, deny location access in the simulator before running it.
 
-Manually check a town and postcode in each supported country, then select a result, open a station, save it and open driving directions. Search and live prices need a network connection. Favourites store metadata only; their detail screen fetches the latest available server prices and shows each price's age. Directions remain available from saved metadata if prices cannot load.
+Manually check a town and postcode in each supported country, then select a result, open a station, save it and open driving directions. Search and live prices need a network connection. UK and German favourites store station metadata; Dutch favourites store only a station ID and reload their details to respect Petromap's temporary-cache terms. Each detail screen fetches the latest available server prices and shows their age. Dutch directions require loaded station details.
 
 Backend regression tests: `cd fuel-finder-backend && .venv/bin/python -m unittest discover -s tests -v`.
 
@@ -111,13 +113,13 @@ Backend regression tests: `cd fuel-finder-backend && .venv/bin/python -m unittes
 
 ## Data source
 
-UK prices are sourced from the [GOV.UK Fuel Finder API](https://www.fuel-finder.service.gov.uk). German prices come from [Tankerkönig](https://creativecommons.tankerkoenig.de/). See the [backend coverage notes](fuel-finder-backend/README.md#german-price-coverage) for caching and provider limits.
+UK prices are sourced from the [GOV.UK Fuel Finder API](https://www.fuel-finder.service.gov.uk). German prices come from [Tankerkönig](https://creativecommons.tankerkoenig.de/), and Dutch prices use [Petromap](https://developer.petromap.eu/). See the backend's [German coverage notes](fuel-finder-backend/README.md#german-price-coverage) and [Dutch setup instructions](fuel-finder-backend/README.md#dutch-price-coverage). Petromap's free allowance is 250 credits per day; a search can consume multiple credits.
 
 ---
 
 ## Privacy
 
-No account or search/location history is kept. Favourites and fuel choice are stored on the device. Apple Maps resolves town/postcode searches and handles directions. Exact search coordinates are used for nearby results; German provider queries use a shared area centre rounded to roughly a kilometre. Area caches contain station data without user or device identifiers. The privacy manifest declares app-only UserDefaults access using [Apple's CA92.1 reason](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitypereasons). See the [privacy policy](privacy-policy.html).
+No account or search/location history is kept. Favourites and fuel choice are stored on the device. Apple Maps resolves town/postcode searches and handles directions. Exact search coordinates are used for nearby results; German and Dutch provider queries use a shared area centre rounded to roughly a kilometre. Area caches contain station data without user or device identifiers. The privacy manifest declares app-only UserDefaults access using [Apple's CA92.1 reason](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitypereasons). See the [privacy policy](privacy-policy.html).
 
 ---
 

@@ -14,15 +14,7 @@ struct FavouritesView: View {
                     List {
                         Section {
                             ForEach(preferences.favourites) { station in
-                                NavigationLink {
-                                    StationDetailView(stationId: station.id, savedStation: station)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(station.name).font(.headline)
-                                        Text("\(station.address) \(station.postcode)")
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
+                                SavedStationRow(station: station)
                                 .swipeActions {
                                     Button("Remove", role: .destructive) { preferences.remove(station.id) }
                                 }
@@ -38,6 +30,41 @@ struct FavouritesView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+        }
+    }
+}
+
+private struct SavedStationRow: View {
+    let station: SavedStation
+    @State private var resolved: SavedStation?
+    @State private var failed = false
+
+    var body: some View {
+        let displayed = resolved ?? station
+        NavigationLink {
+            StationDetailView(stationId: station.id, savedStation: displayed)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(displayed.name).font(.headline)
+                if displayed.hasDetails {
+                    Text("\(displayed.address) \(displayed.postcode)")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text(failed ? "Details unavailable. Open to retry." : "Loading station details…")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .task(id: station.id) {
+            guard station.isPetromap else { return }
+            do {
+                let detail = try await FuelFinderAPI.shared.stationDetail(stationId: station.id)
+                try Task.checkCancellation()
+                resolved = SavedStation(detail)
+            } catch {
+                guard !Task.isCancelled else { return }
+                failed = true
             }
         }
     }
@@ -64,12 +91,14 @@ struct DirectionsButton: View {
 
     var body: some View {
         Button("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
+            guard let latitude = station.latitude, let longitude = station.longitude else { return }
             let item = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(
-                latitude: station.latitude, longitude: station.longitude
+                latitude: latitude, longitude: longitude
             )))
             item.name = station.name
             showError = !item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
         }
+        .disabled(!station.hasDetails)
         .accessibilityHint("Opens driving directions in Apple Maps from your current location")
         .alert("Couldn't open Apple Maps", isPresented: $showError) {
             Button("OK", role: .cancel) { }

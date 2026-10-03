@@ -13,7 +13,8 @@ import httpx
 
 from app import database
 from app.main import app
-from app.services import german_search, tankerkoenig_client
+from app.services import german_search, tankerkoenig_client, station_service
+from app.services.petromap_client import DutchArea
 from app.services.geo import KM_PER_MILE, haversine_miles
 
 
@@ -29,6 +30,12 @@ class GermanOnDemandTests(unittest.IsolatedAsyncioTestCase):
         self.requests = []
         self.response_override = None
         self.timeout = False
+        self.dutch_stations = []
+        async def dutch_search(lat, lng, radius, fuel):
+            return DutchArea(self.dutch_stations, radius)
+        dutch_patch = patch.object(station_service, "get_dutch_stations", side_effect=dutch_search)
+        dutch_patch.start()
+        self.addCleanup(dutch_patch.stop)
         self.provider_stations = [{
             "id": "hanover", "name": "Hanover Station", "brand": "Test",
             "lat": 52.3759, "lng": 9.7320, "postCode": 30159,
@@ -273,11 +280,11 @@ class GermanOnDemandTests(unittest.IsolatedAsyncioTestCase):
             "station_id": "nl_venlo", "trading_name": "Venlo", "country": "nl",
             "address": "Test", "postcode": "5911", "latitude": 51.37, "longitude": 6.17,
         }
-        await database.bulk_upsert_stations([station])
-        await database.bulk_upsert_prices([{
+        station["prices"] = [{
             "station_id": "nl_venlo", "fuel_type": "E10", "pence_per_litre": 205.0,
             "updated_at": "2026-10-02T13:42:26Z",
-        }])
+        }]
+        self.dutch_stations = [station]
         self.timeout = True
         response = await self.nearby(lat=51.37, lng=6.17)
         self.assertEqual(response.status_code, 200)

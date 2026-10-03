@@ -8,6 +8,9 @@ from app.services.country_detector import CURRENCY_FOR_COUNTRY, in_country_box
 from app.services.geo import haversine_miles
 from app.services.german_search import get_german_stations
 from app.services.tankerkoenig_client import GermanPricesUnavailable
+from app.services.petromap_client import (
+    DutchPricesUnavailable, STATION_PREFIX, get_dutch_stations, get_dutch_station,
+)
 from app.models.schemas import (
     StationSummary,
     StationDetail,
@@ -71,21 +74,31 @@ async def nearby_stations(
     # Both EUR providers can contribute near the border. German results come
     # only from a complete area snapshot, never the old fixed-city cache.
     euro_search = country in ("de", "nl")
-    rows = await get_all_stations_with_fuel(fuel_type.value, "nl" if euro_search else country)
-    notice = None
-    german_error = None
+    rows = [] if euro_search else await get_all_stations_with_fuel(fuel_type.value, country)
+    notices, errors = [], []
+
+    def include_area(area):
+        if area.notice:
+            notices.append(area.notice)
+        for station in area.stations:
+            for price in station["prices"]:
+                if price["fuel_type"] == fuel_type.value:
+                    rows.append({**station, **price, "price_updated_at": price["updated_at"]})
+
     if euro_search and in_country_box(lat, lng, "de"):
         try:
             area = await get_german_stations(lat, lng, radius_miles)
             radius_miles = area.radius_miles
-            notice = area.notice
-            for station in area.stations:
-                for price in station["prices"]:
-                    if price["fuel_type"] == fuel_type.value:
-                        rows.append({**station, **price, "price_updated_at": price["updated_at"]})
+            include_area(area)
         except GermanPricesUnavailable as exc:
-            # An unavailable DE provider must not break usable Dutch results.
-            german_error = exc
+            errors.append(("de", exc))
+    if euro_search and in_country_box(lat, lng, "nl"):
+        try:
+            area = await get_dutch_stations(lat, lng, radius_miles, fuel_type.value)
+            radius_miles = area.radius_miles
+            include_area(area)
+        except DutchPricesUnavailable as exc:
+            errors.append(("nl", exc))
 
     summaries = []
     for row in rows:
@@ -93,10 +106,15 @@ async def nearby_stations(
         if s is not None and s.distance_miles <= radius_miles:
             summaries.append(s)
 
-    if german_error:
+    if errors:
         if not summaries:
-            raise german_error
-        notice = "German prices are temporarily unavailable. Showing nearby Dutch stations only."
+            raise next((exc for provider, exc in errors if provider == country), errors[0][1])
+        for provider, _ in errors:
+            notices.append(
+                "German prices are temporarily unavailable. Showing nearby Dutch stations only."
+                if provider == "de" else
+                "Dutch prices are temporarily unavailable. Showing nearby German stations only."
+            )
 
     # Sort
     if sort_by == SortBy.price:
@@ -116,17 +134,24 @@ async def nearby_stations(
         user_lat=lat,
         user_lng=lng,
         radius_miles=radius_miles,
-        notice=notice,
+        notice=" ".join(notices) or None,
     )
 
 
 async def station_detail(station_id: str) -> StationDetail | None:
     """Full detail for one station including all fuel prices."""
-    row = await get_station(station_id)
+    if station_id.startswith(STATION_PREFIX):
+        row = await get_dutch_station(station_id)
+        price_rows = row["prices"] if row else []
+    else:
+        row = await get_station(station_id)
+        # Retired ANWB rows must not keep advertising unrefreshed Dutch prices.
+        if row and row.get("country") == "nl":
+            return None
+        price_rows = await get_station_prices(station_id) if row else []
     if not row:
         return None
 
-    price_rows = await get_station_prices(station_id)
     amenities = json.loads(row.get("amenities", "[]")) if isinstance(row.get("amenities"), str) else row.get("amenities", [])
 
     country = row.get("country", "uk")
