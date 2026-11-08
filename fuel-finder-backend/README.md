@@ -94,6 +94,10 @@ TANKERKOENIG_API_KEY=your_tankerkoenig_key
 PETROMAP_API_KEY=your_approved_petromap_key
 ```
 
+Service settings: Root Directory `/fuel-finder-backend`, config file path
+`/fuel-finder-backend/railway.toml` (absolute — it does not follow the root
+directory). Pushes to `main` that touch `fuel-finder-backend/` auto-deploy.
+
 Attach a Railway volume to the backend service. The app automatically stores
 SQLite at `$RAILWAY_VOLUME_MOUNT_PATH/fuel_finder.db` when that variable is
 provided by Railway. Without a volume, the imported CSV cache can disappear on

@@ -68,9 +68,17 @@ Register for API credentials at [developer.fuel-finder.service.gov.uk](https://w
 
 ### Deploy to Railway
 
-1. Connect this repo in Railway, set root directory to `fuel-finder-backend`
-2. Add `FUEL_FINDER_CLIENT_ID` and `FUEL_FINDER_CLIENT_SECRET` as environment variables
-3. Railway picks up `railway.toml` automatically — no further config needed
+The backend auto-deploys from `main` on GitHub (only when files under
+`fuel-finder-backend/` change). Railway service settings:
+
+1. Source: this GitHub repo, branch `main`
+2. Root Directory: `/fuel-finder-backend`
+3. Config file path: `/fuel-finder-backend/railway.toml` (Railway does not resolve it relative to the root directory)
+4. Attach a volume — SQLite is stored at `$RAILWAY_VOLUME_MOUNT_PATH/fuel_finder.db`. Don't set `DATABASE_PATH`.
+5. Add the environment variables above
+
+`railway.toml` builds from the `Dockerfile` and health-checks `/health`. With a
+volume attached Railway runs a single replica, and redeploys have a few seconds of downtime.
 
 ---
 
