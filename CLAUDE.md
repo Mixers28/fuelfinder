@@ -48,7 +48,7 @@ On first start the server fetches all stations and prices, then APScheduler refr
 
 SwiftUI app. Open the Xcode project directly — there is no package manager manifest at the top level.
 
-- `Services/FuelFinderAPI.swift` — `baseURL` defaults to `http://localhost:8000/api`; update this when pointing at a deployed backend
+- `Services/FuelFinderAPI.swift` — `baseURL` defaults to `https://fuel-finder.chaosisaladder.co.uk` (Railway custom domain behind Cloudflare); repoint DNS rather than changing this when moving hosts
 - `Services/LocationManager.swift` — CoreLocation, while-in-use only
 - `Models/FuelModels.swift` — Swift `Codable` structs mirroring the backend Pydantic schemas
 - `Views/ContentView.swift` — main map/list view

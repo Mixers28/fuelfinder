@@ -68,17 +68,21 @@ Register for API credentials at [developer.fuel-finder.service.gov.uk](https://w
 
 ### Deploy to Railway
 
-The backend auto-deploys from `main` on GitHub (only when files under
-`fuel-finder-backend/` change). Railway service settings:
+Railway project `fuel-finder`, service `backend` (region `europe-west4`). It
+auto-deploys from `main` on GitHub when files under `fuel-finder-backend/` change.
+Settings live on the Railway service (no `railway.toml` — Railway's Config as
+Code is deprecated):
 
-1. Source: this GitHub repo, branch `main`
-2. Root Directory: `/fuel-finder-backend`
-3. Config file path: `/fuel-finder-backend/railway.toml` (Railway does not resolve it relative to the root directory)
-4. Attach a volume — SQLite is stored at `$RAILWAY_VOLUME_MOUNT_PATH/fuel_finder.db`. Don't set `DATABASE_PATH`.
-5. Add the environment variables above
+- Source: this GitHub repo, branch `main`; Root Directory `/fuel-finder-backend`
+- Watch paths: `/fuel-finder-backend/**` (patterns match from the repo root)
+- Build: the `Dockerfile` (Railway uses it automatically when present)
+- Healthcheck `/health`, timeout 300s; restart on failure (max 10)
+- Volume mounted at `/data` — SQLite is stored at `$RAILWAY_VOLUME_MOUNT_PATH/fuel_finder.db`. Don't set `DATABASE_PATH`.
+- Environment variables as above
 
-`railway.toml` builds from the `Dockerfile` and health-checks `/health`. With a
-volume attached Railway runs a single replica, and redeploys have a few seconds of downtime.
+With a volume attached Railway runs a single replica, and redeploys have a few
+seconds of downtime. The iOS app talks to `fuel-finder.chaosisaladder.co.uk`,
+a Railway custom domain proxied through Cloudflare.
 
 ---
 
@@ -91,7 +95,7 @@ SwiftUI app targeting iOS 17.6+. Open `fuelfinder/fuelfinder.xcodeproj` in Xcode
 Edit the default `baseURL` in `fuelfinder/Services/FuelFinderAPI.swift`:
 
 ```swift
-init(baseURL: String = "https://your-railway-url.railway.app/api", session: URLSession = .shared)
+init(baseURL: String = "https://fuel-finder.chaosisaladder.co.uk", session: URLSession = .shared)
 ```
 
 ### Key files
